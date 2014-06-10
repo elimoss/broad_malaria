@@ -1,0 +1,38 @@
+#!/usr/bin/env ruby
+
+abort("Usage: windowed_depth windows.bed bam") if ARGV.length != 2
+
+#output: average depth per window
+
+bed = File.open(ARGV[0]).read.split("\n").map{|t| t.split("\t")}
+bam = ARGV[1]
+
+bed.each do |loc|
+	depths = `samtools depth -r #{loc[0]}:#{loc[1]}-#{loc[2]} #{bam}`.split("\n")
+	if depths.length == 0
+		puts 0
+	else
+		depths = depths.map{|t| t.split("\t")}
+		avg = depths.map{|t| t[2].to_i}.reduce(:+)/(loc[2].to_i - loc[1].to_i).to_f	
+		puts avg
+	end
+
+=begin
+	window_size = loc[2].to_i - loc[1].to_i
+	running_total = 0
+	depths = File.open(ARGV[1], 'r')
+	depth = depths.gets.split("\t")
+	#get up to the start
+	while depth[0] != loc[0] or depth[1].to_i < loc[1].to_i do
+		depth = depths.gets.split("\t")
+	end
+	
+	while depth[1].to_i < loc[2].to_i do
+		running_total += depth[2].to_i
+		depth = depths.gets.split("\t")
+	end
+	
+	puts running_total/window_size.to_f
+	STDOUT.flush
+=end
+end

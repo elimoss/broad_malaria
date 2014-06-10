@@ -1,0 +1,33 @@
+#!/usr/bin/env ruby
+
+require 'bio'
+require '~/scripts/kit/util.rb'
+
+abort("Usage: gene_degeneracy_calculator proteins.fa") if ARGV.length != 1
+
+proteins = dice_fasta ARGV.first
+
+table = Bio::CodonTable[1]
+
+proteins.keys.select{|t| t.include? 'cds'}.each do |id| 
+	puts id
+	seq = proteins[id].delete('X').delete('J').gsub('B', 'R')
+	seq = seq.gsub('Z', 'Q')
+	codons_by_position = seq.split('').map{|aa| table.revtrans(aa).map{|codon| codon.split('')}.transpose}
+	
+	
+#	puts seq
+#	print codons_by_position
+#	puts
+	
+	synonymity = codons_by_position.map{|one_protein| one_protein.map{|position| (position.uniq.length - 1)/3.0}}.flatten
+	nonsynonymity = synonymity.map{|s| 1-s}
+	
+	puts [synonymity.sum, nonsynonymity.sum].join("\t")
+
+
+	#checks
+#	puts seq.length * 3
+#	puts synonymity.sum + nonsynonymity.sum
+#	$stdin.gets
+end

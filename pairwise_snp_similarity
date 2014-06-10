@@ -1,0 +1,61 @@
+#!/usr/bin/env ruby
+
+abort("Usage: pairwise_snp_similarity freqs sample1_idx_or_'-' sample_list_or_sample1_or_'-'_for_all (sample2 sample3 ...)") if ARGV.length < 3
+
+#====
+#setting up the inputs that will be used later
+
+
+freqs = ARGV[0]
+if ARGV.length == 3
+	if ARGV[1] == '-'
+		samples = `head -1 #{freqs}`.split("\t").select{|t| not (["Variant", "Chromosome", "Reference"].include? t)}.map{|f| f.chomp}
+		#samples = samples[0..samples.length - 5]
+	else
+		samples = File.open(ARGV[3]).read.split("\n")
+	end
+elsif ARGV.length > 3
+	samples = ARGV[3..ARGV.length]
+end
+
+abort("Need more than one distinct sample") if samples.uniq.length == 1
+
+if ARGV[1] == '-' or ARGV.length > 3
+	samples1 = samples
+else
+	samples1 = samples[ARGV[1].to_i - 1]
+end
+#===
+#upon completion of input preparation, suffice to say that samples1 contains either the same list as samples, or just one sample.  Everything in samples will be compared to everything in samples1.  
+
+done = []
+samples1.each do |s1|
+	samples.each do |s2|
+		if s1 != s2 and not (done.include? [s1,s2] or done.include? [s2,s1]) #if this is a new, unlike pairing
+			done << [s1,s2] #note that it has been done
+			`/home/unix/emoss/scripts/kit/select_columns #{freqs} #{s1} #{s2} > /tmp/pairwise_snp.tmp` #separate the two samples into their own file
+			tmp = File.open('/tmp/pairwise_snp.tmp') #open that file (this could have been done without making an extra file, probably.  Making the file and then parsing it one line at a time makes this script amenable to very large files.)
+		
+			snps_count = 0.0 #set up the counters
+			shared_snps = 0
+			while true #until a break is encountered...
+				snps = tmp.gets #load one line of the two-sample subset file
+				puts 'bam'
+				break if snps == nil #exit this loop if the file is over
+				next if snps.include? ',' #ignore multi-allelic sites
+				
+				snps = snps.chomp.split("\t") #remove newlines and separate the fields into array indices
+				snps_count += 1 if not snps.include? '.' #count this site if neither sample is missing
+#				snps1 += 1 if snps[0] == '1' and not snps.include? '.'
+#				snps2 += 1 if snps[1] == '1'and not snps.include? '.'
+				shared_snps += 1 if snps[0] == snps[1] and not snps.include? '.' #count this site as shared if both samples are the same (variant or invariant) and not missing.
+			end
+			tmp.close #close the two-sample subset file
+			#express the percentages as a fraction of those sites genotyped in all samples
+			puts "#{s1}\t#{s2}\t#{shared_snps}\t#{shared_snps/snps_count}\t#{snps_count}"
+		end
+	end
+end
+
+
+

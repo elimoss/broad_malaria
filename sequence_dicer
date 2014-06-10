@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+
+abort("Usage: sequence_dicer fasta_one_line_sequences.fa size overlap") if ARGV.length < 3 or ARGV.length > 6
+
+input = ARGV[0]
+size = ARGV[1].to_i - 1 
+overlap = ARGV[2].to_i - 1
+out = File.open(ARGV[3], 'w') if ARGV.length >=4
+fwd_primer = ARGV[4] if ARGV.length >= 5
+rev_primer = ARGV[5] if ARGV.length >= 6
+file = File.open(input)
+
+header = file.gets
+seq = file.gets
+
+while(header != nil and seq != nil)
+	
+	#do something with the sequence
+	#====
+	(seq.length/(size - overlap).to_f).ceil.times do |chunk|
+		chunked_seq = fwd_primer + seq[(chunk*(size - overlap))..(((chunk+1)*size) - (overlap * chunk))].chomp + rev_primer
+		new_out_line = header.chomp.gsub(' ', '_') + '_chunk_' + chunk.to_s + "\n" + chunked_seq
+		if not chunked_seq.include? 'N' and not chunked_seq == ''
+			if out == nil
+				puts new_out_line
+			else
+				out.write(new_out_line + "\n")
+			end
+		end
+	end
+	#====
+	
+	header = file.gets
+	seq = file.gets
+end

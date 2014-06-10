@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+
+#input: bed chroms.list
+#output: inverse bed
+
+prev_end = nil
+prev_chrom = nil
+
+#chroms = File.open(ARGV[1]).read.split("\n").map{|t| t.split("\t")}
+#chroms_d = {}
+#chroms.each{|c| chroms_d[c[0]] = c[1]}
+
+ARGF.read.each_line("\n") do |l|
+	s = l.split("\t")
+	
+	if not prev_end == nil and prev_chrom == s[0]
+		puts "#{s[0]}\t#{prev_end}\t#{s[1]}" 
+	elsif prev_chrom != s[0] or prev_end == nil
+#		puts "#{prev_chrom}\t#{prev_end}\t#{chroms_d[prev_chrom]}" 
+		puts "#{s[0]}\t#{1}\t#{s[1]}"
+	end
+	
+	prev_end = s[2].to_i
+	prev_chrom = s[0]
+end

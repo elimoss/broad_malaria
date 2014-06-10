@@ -1,0 +1,59 @@
+#!/usr/bin/env ruby
+
+require '~/scripts/kit/util.rb'
+
+abort("Usage: protein_sequence_mutator cds_protein_fasta gff individual_snpeff_vcf.gz") if ARGV.length != 3
+
+cdss = Hash[*dice_file(ARGV.first).flatten]
+gff = File.open(ARGV[1]).read.split("\n")
+vcf = ARGV[2]
+sample_name = `allele_frequency #{vcf} --samples`
+
+cdss.keys.each do |cds|
+	next if not cds.include? 'cds'
+	id = cds[5..(cds.length-3)]
+	seq = cdss[cds]
+	gff_info = gff.select{|g| g.include? 'gene' and g.downcase.include? id[4..(id.length)]}
+	next if gff_info.length != 1
+	gff_info = gff_info.first.split("\t")
+
+	chrom = gff_info.first
+	start = gff_info[3]
+	finish = gff_info[4]
+
+	non_syn = dice_text `tabix -h #{vcf} #{chrom}:#{start}-#{finish} | grep NON_SYN`
+
+	effs = non_syn.map{|ns| ns[7].split(';').select{|blar| blar.include? 'EFF'}.first.split(',').select{|blar| blar.include? "NON_SYN"}.map{|t| t.split("|")[3]}}
+	
+	if effs.length > 0
+		newseq = seq
+		effs.each do |eff|
+	
+			indices = eff.map{|e| e[1..e.length - 2].to_i - 1}
+			from = eff.map{|e| e.split('').first}
+			to = eff.map{|e| e.split('').last.gsub('*', '')}
+
+
+			indices.each_with_index do |i, idx| 
+				next if i + 1 > newseq.length
+				next if from[idx] != seq[i]
+
+				newseq = newseq[0...i]+to[idx]+newseq[i+1..newseq.length]
+			end
+
+
+		
+		end
+		
+#		puts seq
+#		puts
+#		print effs
+#		puts
+		puts '>'+id+ '_' + sample_name
+		puts newseq
+	
+	end
+	
+			
+end
+

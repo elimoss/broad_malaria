@@ -1,0 +1,27 @@
+#!/usr/bin/env ruby
+
+#accepts as input (parameter or stdin) a list of genomic coordinates as:
+# chrom <tab> base coordinate <tab> reference allele <tab> alternate allele
+#outputs +/- 30bp Pf3D7v90 flanking sequence with the SNP/Ref allele bracketed in the center.
+
+puts "Usage: flanker in.bed flankingBPnumber" if ARGV.length != 2
+
+
+reference = '/home/unix/emoss/9/genome.fasta'
+#reference = '/home/unix/emoss/projects/xtended_molecular_barcode/liftover/whole_genomes/sanger_Pf3D7v2.1.5.fasta'
+
+snps = File.open(ARGV[0]).read
+offset = ARGV[1].to_i
+
+snps.split("\n").each do |l|
+	s = l.split("\t")
+	next if s[2].length > 1
+	seq = `samtools faidx #{reference} #{s[0]}:#{s[1].to_i-offset}-#{s[1].to_i+offset}`.split("\n").drop(1).join
+	abort("Sequence retrieval failed") if seq.length == 0
+	alt = s[2..3].select{|t| t != seq[offset]}.join
+	out_seq = seq[0..(offset-1)]+'['+seq[offset]+'/'+alt+']'+seq[(offset+1)...seq.length]
+	abort("ERROR: Reference from sequence doesn't match provided reference!") if seq[offset] != s[2] and seq[offset] != s[3]
+	puts ">#{s[0..1].join(":")}"
+	puts out_seq
+	
+end

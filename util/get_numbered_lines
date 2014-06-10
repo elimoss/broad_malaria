@@ -1,0 +1,10 @@
+#!/usr/bin/env ruby
+
+require '~/scripts/kit/util.rb'
+
+text = dice_file ARGV.first
+line_numbers = dice_file ARGV.second
+
+line_numbers.each do |n| 
+	puts text[n.to_i - 1].join("\t")
+end

@@ -1,0 +1,7 @@
+#!/usr/bin/env ruby
+
+#returns reverse complement of nucleotide sequence
+
+require '/home/unix/emoss/scripts/kit/util.rb'
+
+puts ARGF.read.revcomp

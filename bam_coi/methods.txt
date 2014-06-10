@@ -1,0 +1,18 @@
+Haplotype coalescence is achieved with a heirarchical, agglomerative clustering algorithm.  Two haplotypes differentiated by one nucleotide and possessing the most skewed abundance ratio are selected for coalescence, and the process continues until the smallest abundance ratio quotient between two haplotypes is greater than the maximum abundance quotient, selected to minimize false negatives and false positives in empirical validation data.
+
+Pseudocode:
+
+n = number of distinct haplotypes
+H = collection of haplotypes {h_1, h_2...h_n}
+D(i,j) = hamming distance between h_i and h_j
+A(i) = abundance of h_i
+R(i,j) = min(h_i, h_j) / max(h_i, h_j)
+r = maximum abundance quotient
+
+While min(R) < r
+	select h_i, h_j such that R(i,j) = min(R), D(i,j) = 1, and A(i) < A(j)
+	D = D - D(i,j)
+	H = H - h_i
+	A(j) = A(i) + A(j)
+End
+

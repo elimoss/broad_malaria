@@ -1,0 +1,74 @@
+#!/usr/bin/env ruby
+
+require_relative('MossVCF.rb')
+
+
+def parse_options()
+	require 'optparse'
+	@options = {:job_name => 'vcf_post_'}
+	opt_parser = OptionParser.new do |opt|
+			opt.banner = "Usage: parallel_annotate inVCF.vcf.gz (ref.fasta) [OPTIONS]"
+			opt.separator ""
+			opt.separator "reference defaults to ~/moss/refseq/plasmodb/9/genome.fasta"
+			opt.separator ""
+			opt.separator "Options"
+	
+			opt.on("--job NAME", "Use the provided prefix for the LSF jobs.  Default: vcf_post_") do |name|
+				@options[:job_name] = name
+			end
+			
+	end
+	opt_parser.parse!	
+
+	if ARGV.length != 1 and ARGV.length != 2
+		puts opt_parser
+		abort()
+	end	
+	
+	@input = ARGV[0]
+	ARGV.length == 2 ? @fasta = ARGV[1] : @fasta = '/seq/plasmodium/moss/refseq/plasmodb/9/genome.fasta'
+	
+end
+
+
+def parallel_annotate()
+	parse_options()
+	parallel_annotate_dir = '/broad/hptmp/emoss/scratch/parallel_annotate'
+	
+	#0. check if parallel_annotate_dir exists and is empty
+	#	c = `ls #{parallel_annotate_dir}`
+	#	abort("please empty ") if not c.length == 0 
+	
+	#1. split up VCF
+		
+		interval_count = 100
+		
+		intervals = []
+		(1..interval_count).each do |index|
+			intervals << make_intervals(index, interval_count, @fasta)
+		end
+		
+		intervals.each_index do |i|
+			intervals_subset = intervals[i]
+			formatted_intervals = '-L ' + intervals_subset.map { |s| s[0]+':'+s[1].to_s+'-'+s[2].to_s}.join(' -L ')
+			
+			#puts `bsub -o ~/lsf_output/#{@options[:job_name]} -J #{@options[:job_name]}split_vcf_#{i} -W 4:00 -q hour  java -Xmx2g -jar #{GATK} -R #{@fasta} -T SelectVariants --variant #{@input} -o #{parallel_annotate_dir}/tmp_#{i}.vcf.gz #{formatted_intervals}`
+		end
+
+	
+	#2. filter/annotate sub-VCF's
+
+#		 puts `bsub  -o ~/lsf_output/#{@options[:job_name]} -J #{@options[:job_name] + 'annot-master'} -W 4:00 -q hour "find #{parallel_annotate_dir} -name \\"*.vcf.gz\\" | xargs -n 1 -I {} bsub -o ~/lsf_output/post_process_vcf -J #{@options[:job_name] + 'annot'} -W 4:00 -q hour python ~/scripts/kit/snp_call.py post_process_vcf {} Pf3D7v90 \{\}.filtered.vcf.gz \{\}.variant.vcf.gz \{\}.snpeff.vcf.gz"`
+	
+	
+	#4. recombine VCF's
+		constituents = `find #{parallel_annotate_dir} -name '*snpeff.vcf.gz'`.split("\n")
+		constituents = ' --variant ' + constituents.join(' --variant ')
+		
+		puts `bsub -w #{@options[:job_name] + 'annot-master'} -w #{@options[:job_name] + 'annot'}  -o ~/lsf_output/#{@options[:job_name]} -J #{@options[:job_name]+'combine'} -W 4:00 -q hour  java -Xmx2g -jar #{GATK} -R #{@fasta} -T CombineVariants -o #{parallel_annotate_dir}/#{@input.split('/').last}.snpeff_annotated.vcf.gz #{constituents} --genotypemergeoption UNSORTED --assumeIdenticalSamples -U LENIENT_VCF_PROCESSING`
+
+	#6. Tabix indexing
+	#`bsub -w #{@options[:job_name]+'combine'} -o ~/lsf_output/#{@options[:job_name]} -J #{@options[:job_name] + 'index'} -W 4:00 -q hour tabix #{parallel_annotate_dir}/#{@input}.snpeff_annotated.vcf.gz -p vcf -f`
+	
+end	 
+parallel_annotate

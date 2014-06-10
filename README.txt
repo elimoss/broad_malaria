@@ -1,0 +1,19 @@
+allele_frequency	This one is a real workhorse.  The primary function of this script is to downsample a VCF to sites of interest, reformat the data so it's more human-readable, and optionally average allele frequencies by sample group.  It answers questions like "how common is this polymorphism in french guiana" and "how many SNPs occur with MAF > 0.25 in Malawi" and "which of these samples contains nonsynonymous mutations in PfCARL".  Other flags allow simpler queries like the samples contained in a VCF or the number of callable sites.  The script is parallelizable for execution as an LSF job array.  Seven times out of ten, a question from a member of the Wirth lab can be answered with a simple execution of this script.
+bam_mapped_reads	This script returns the mapped, total, and percent mapped reads for a given bam file.
+barcode_simulator	Accepts a master vcf, a list of loci in BED format, a list of samples, and an output format specifier ('oneperline' or nothing) and does an in silico simulation of a molecular barcode at the loci for the samples.  Handy for corroborating non-WGS methods of genotyping sites, and testing new barcode sites in our sequenced cohort.
+drug_selection_winnower	Another script written to address the demands fo the Wirth lab.  The purpose of this script is to identify mutations present in drug-selected offspring, but not the parental strain.  Or vice versa.  Several options are included for further downsampling of likely uninformative polymorphisms.  If you hear the word "drug," probably use this script.  Run it without arguments for further clarification.
+fasta_one_line_seqs_reformatter	Incredibly useful.  cat a fasta file and pipe it to this script, and it will come out with each nucleotide sequence condensed onto one line.  In other words, each line in the resulting output will alternate header, complete sequence, header, etc.  This is handy for many reasons, including that you can pipe the output on to grep and with the -A1 flag pull out sequences matching some regular expression in the sequence identifier.  Use it wisely.
+flanker	This is part of the Sequenom workflow.  When new sites are selected to be incorporated into Sequenom assays, the flanking sequence must be pulled from the reference.  This script allows the specification of genomic loci and flanking sequence length, and returns flanked loci properly formatted for Sequenom.
+flanker_validator	Validates the output of flanker.  Useful when coordinates may have been specified in alternative reference assemblies, or are just plain wrong.
+gene_stats	Finds Fst and pi for the given samples.  The synonymity file can be found in /seq/plasmodium/moss/refseq/plasmodb/9/.  The pop files are just sample lists.  The VCF files are normally Master.vcf.gz and Master_snpeff.vcf.gz.  When the populations are different, Fst is meaningful.  When they are the same, pi is meaningful.  
+gene_synonymity	This generates the synonymity file used by the previous script, gene_stats.
+get_polymorphic_seq	Use Danny Park's gene_fasta function within his gene_stats.py script instead.
+MossVCF.rb	Originally intended to be a collection of useful methods, it really just includes one, which chunks a genome into intervals of a specified size and returns the coordinates of each.
+pairwise_snp_similarity	Plink offers a much better way of doing this than this script.
+protein_sequence_mutator	Use Danny Park's gene_fasta function within his gene_stats.py script instead.
+README.txt	A hopefully helpful file.
+remap_eval	After remapping a bam with an alternative aligner, gives some metrics for change in parsimony
+select_columns	Like cut, but allows the specification of columns by header regex.  If the file is '-' uses stdin.
+sum_numbers	pipe a list of numbers, each on its own line, to this one.  see what happens.
+util.rb	Used by all of my larger scripts, contains a wealth of helpful ruby methods for biological things and basic data manipulation.
+

@@ -1,0 +1,10 @@
+#!/usr/bin/env ruby
+
+#make bam.table from bams.list
+
+list = File.open(ARGV[0]).read.split("\n")
+
+list.each do |bam| 
+	sample = `samtools view -H #{bam} | grep ^@RG | transpose | grep SM`
+	puts sample.split("\n")[0][3..sample.length].gsub(' ', '_') + "\t" + bam.chomp
+end

@@ -1,0 +1,44 @@
+#!/usr/bin/env ruby
+
+#accepts as input (parameter or stdin) a list of genomic coordinates as:
+# chrom <tab> base coordinate <tab> reference allele <tab> alternate allele
+#outputs +/- 30bp Pf3D7v90 flanking sequence with the SNP/Ref allele bracketed in the center.
+
+puts "Usage: flanker_validator in.bed <plasmodb | sanger>" if ARGV.length != 2
+
+if ARGV[1] == 'plasmodb'
+	reference = '/home/unix/emoss/9/genome.fasta'
+elsif ARGV[1] == 'sanger'
+	reference = '/home/unix/emoss/projects/xtended_molecular_barcode/liftover/whole_genomes/sanger_Pf3D7v2.1.5.fasta'
+end
+
+snps = File.open(ARGV[0]).read
+
+nonmatches = 0
+nonmatch_sites = []
+flip_matches = 0
+matches = 0
+
+snps.split("\n").each do |l|
+	s = l.split("\t")
+	next if s[2].length > 1
+	seq = `samtools faidx #{reference} #{s[0]}:#{s[1]}-#{s[1]}`.split("\n").drop(1).join
+	abort("Sequence retrieval failed") if seq.length == 0
+	if seq != s[2]
+		if seq == s[3]
+			flip_matches += 1
+		else
+			nonmatches += 1
+			nonmatch_sites += [l,`samtools faidx #{reference} #{s[0]}:#{s[1].to_i-3}-#{s[1].to_i+3}`.split("\n").drop(1).join]
+		end
+	else
+		matches += 1
+	end
+	
+end
+
+puts "Matches: #{matches}"
+puts "Flip matches: #{flip_matches}"
+puts "Mismatches: #{nonmatches}"
+puts "Mismatching sites:"
+puts nonmatch_sites

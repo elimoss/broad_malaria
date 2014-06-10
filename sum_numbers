@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+
+nums = ARGF.read.split("\n").map{|t| t.to_f}
+puts nums.reduce(:+).to_i

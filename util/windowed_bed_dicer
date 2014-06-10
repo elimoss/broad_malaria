@@ -1,0 +1,18 @@
+#!/usr/bin/env ruby
+
+#takes a bed file and sub-divides it into x bp windows
+abort("Usage: bed window_size") if ARGV.length != 2
+require('~/scripts/kit/util.rb')
+bed = dice_file ARGV[0]
+window_size = ARGV[1].to_i
+
+abort("Usage: windowed_bed_dicer bedfile window_size") if ARGV.length != 2
+
+bed.each do |l|
+	((l[2].to_i - l[1].to_i)/window_size).times do |window|
+		start = (l[1].to_i + window_size * window)
+		finish = (l[1].to_i + window_size * (window + 1))
+		
+		puts [l[0], start, finish].join("\t")
+	end
+end

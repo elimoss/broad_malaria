@@ -1,0 +1,46 @@
+#!/usr/bin/env ruby
+
+#in: sample, comma-delimited range
+#out: suitable sites for haplotyping in format ready for bam_coi
+
+=begin
+
+criteria:
+
+1. individual site depth is at least 100
+1a. those 100 reads must have mapping quality of 30 or greater
+2. no var, stevor, rif
+3. max allele freq at each site is less than 0.9
+4. at least 4 suitable sites within each interval
+	-interval size = 100bp
+
+=end
+
+abort("Usage: unique_intervals sample loc_list loc_idx gff.gz") if ARGV.length != 4
+
+require_relative('methods.rb')
+
+sample = ARGV[0]
+loc_filepath = ARGV[1]
+loc_idx = ARGV[2]
+gff = ARGV[3]
+
+locs = parse_locs_table(loc_filepath, loc_idx)
+
+locs.each do |location|
+	interval_size = 100
+	interval_count = ((location[1][1] - location[1][0]) / interval_size) + 1
+	interval_count.times do |current_interval|
+		current_location = [location[0], 
+						[location[1][0]+(interval_size*current_interval), 
+						location[1][0]+(interval_size*(current_interval + 1))]]
+		
+		all_positions = [location[0], 
+						(location[1][0]+(interval_size*current_interval).. 
+						(location[1][0]+(interval_size*(current_interval + 1)))).to_a]
+		
+		suitable = is_unique_enough(current_location, 100)
+		
+		puts "#{location[0]}\t#{current_location[1].join(',')}" if suitable
+	end
+end

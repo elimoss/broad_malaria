@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+find  . -maxdepth 1 -name "*.sam" -exec bsub -J sam2bam -o sam2bam.log -M 4 -W 4:00 "samtools view -b -S {} > {}.bam" \;

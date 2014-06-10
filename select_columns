@@ -1,0 +1,36 @@
+#!/usr/bin/env ruby
+
+abort("Usage: select_columns file header1 header2 header3 (accepts regex)") if ARGV.length == 0
+
+if ARGV[0] == '-'
+	contents = $stdin
+else
+	contents = File.open(ARGV[0])
+end
+
+queries = ARGV[1..ARGV.length]
+
+
+class Array
+	def something_matches(foo)
+		self.each do |item|
+			return true if foo.match(Regexp.new(item)) != nil
+		end
+		return false
+	end
+end
+
+headers = contents.gets.split("\t")
+subset = headers.select{|h| queries.something_matches h}
+indices = subset.map{|h| headers.index(h)}
+
+puts subset.join("\t")
+
+while true
+	l = contents.gets
+	break if l == nil
+	
+	s = l.split("\t")
+	subset = indices.map{|i| s[i]}
+	puts subset.join("\t")
+end

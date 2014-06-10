@@ -1,0 +1,53 @@
+#!/usr/bin/env ruby
+
+abort("Usage: gene_pi vcf.gz groups.txt bed (ref)") if ARGV.length != 3 and  ARGV.length != 4
+
+input = ARGV[0]
+groupfile = File.open(ARGV[1]).read.split("\n")
+genes = ARGV[2]
+ARGV.length == 3 ? ref = ARGV[4] : ref = ''
+
+
+def pi_line(l, cols, headers)
+	s = l.split("\t")	
+	
+	pos = s[headers.index('Position')].to_i
+
+	freqs = cols.map{|c| s[c][0] }
+	return if freqs.include? '2' or freqs.include? '.'
+	
+	freqs = freqs.map{|f| f.to_i}
+	
+	pi = freqs.select{|f| f ==1}.length * freqs.select{|f| f == 0}.length / freqs.length.to_f
+
+	return pi
+end
+
+pi_collection = []
+
+freqs = `allele_frequency #{input} #{ref} --bed #{genes}`.split("\n")
+freq_header = freqs[0].split("\t")
+
+group = groupfile.map{|sample| freq_header.index(sample)}
+
+freqs = freqs.drop(1)
+
+
+
+pi_collection = freqs.map{|f| pi_line(f, group, freq_header)}.select{|t| t != nil}
+
+if pi_collection.length > 0  
+	pi = pi_collection.reduce(:+)
+else
+	pi = '.'
+end
+
+
+#compute the number of bases in the input.
+total = 0
+File.open(genes).each_line("\n") do |l|
+	s = l.split("\t")
+	total += (s[2].to_i - s[1].to_i)
+end
+puts "Total bases: #{total}"
+puts "Pi: #{pi/total.to_f}"

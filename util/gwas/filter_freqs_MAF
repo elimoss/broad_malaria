@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby
+
+rows = File.open(ARGV[0])
+
+header = true
+while (true)
+	row = rows.gets
+	break if row == nil
+	if header
+		puts rows
+		header = false
+	end
+
+
+	puts row if row.split("\t")[0..row.split("\t").length - 3].map{|t| t.to_i}.reduce(:+) > ARGV[1].to_i
+end

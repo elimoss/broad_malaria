@@ -1,0 +1,17 @@
+#!/usr/bin/env ruby
+
+#in: windowed_genome.bed reference.fasta
+#out: in.bed with one column added per sample containing snp count per row interval.
+
+abort("Usage: windowed_genome.bed reference.fasta") if ARGV.length != 2
+
+bed = File.open(ARGV[0]).read.split("\n").map{|t| t.split("\t")}
+ref = ARGV[1]
+
+bed.each do |loc|
+	seq = `samtools faidx #{ref} #{loc[0]}:#{loc[1]}-#{loc[2]}`
+	seq = seq.split("\n").drop(1).join('')
+	total_length = seq.length
+	gc = seq.delete('AT').length
+	puts gc/total_length.to_f
+end

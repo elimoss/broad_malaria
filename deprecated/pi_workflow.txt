@@ -1,0 +1,14 @@
+bsub -J pi -o pi.log -M 4 -W 4:00 vcftools --site-pi --gzvcf ~/vcf/Master.vcf.gz --keep samples.txt --out allSenPi
+
+bsub -o log -J ppgpi pi_post_process peru_png_pi.sites.pi.gz --bed ../bed_gff/genes.bed \> peru_png_genes_pi.txt
+
+bgzip 5SenPi.sites.pi 
+tabix -s 1 -b2 -e2 -S 1 5SenPi.sites.pi.gz 
+
+overall pi
+pi_post_process 5SenPi.sites.pi.gz --bed ../pfal_genes.bed > 5SenPi.genes.txt &
+pi_post_process 5SenPi.sites.pi.gz --bed ../pfal_nongenes.bed > 5SenPi.nongenes.txt &
+
+genepi
+bsub -M 4 -J genepi -o genepi.log pi_post_process 5SenPi.sites.pi.gz --gff ~/9/PlasmoDB-9.0_Pfalciparum3D7.gff \> 5SenPi.genepi.txt
+

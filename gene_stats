@@ -1,0 +1,72 @@
+#!/usr/bin/env ruby
+
+require '/home/unix/emoss/scripts/kit/util.rb'
+
+abort("Usage: gene_stats vcf snpeff.vcf gff pop1 pop2 synonymity.fa (current_slice number_of_slices)") if (ARGV.length != 6 and ARGV.length != 8)
+
+vcf = ARGV[0]
+snpeff_vcf = ARGV[1]
+gff = dice_gff ARGV[2]
+populations = dice_file ARGV[3]
+populations += dice_file ARGV[4]
+popfile = ARGV[3]
+popfile2 = ARGV[4]
+synonymity = Hash[*dice_file(ARGV[5])]
+
+tmpdir = '/broad/hptmp/emoss/gene_stats'
+tmpfile = "gene_stats_#{(0...50).map{ ('a'..'z').to_a[rand(26)] }.join}.tmp"
+
+puts "Gene\tPi\tPiN\t#N\tPiS\t#S\tmean_Fst\tweighted_Fst"
+
+genes_to_do = []
+if ARGV.length == 8
+	current = ARGV[6].to_i - 1
+	total = ARGV[7].to_i
+	window_size = gff.keys.length / total
+	genes_to_do = gff.keys[(current*window_size)...((current+1)*window_size)]
+else
+	genes_to_do = gff.keys
+end
+
+genes_to_do.each do |gene|
+	#find genomic interval and total exonic length of gene	
+	start = gff[gene].transpose[3].map{|t| t.to_i}.min
+	finish = gff[gene].transpose[4].map{|t| t.to_i}.max
+	total_exonic_length = gff[gene].map{|exon| exon[4].to_i - exon[3].to_i}.reduce(:+)
+	#subset master vcf to spec'd samples within exon
+	`tabix -h #{vcf} #{gff[gene].map{|exon| "#{exon.first}:#{exon[3]}-#{exon[4]}"}.join(' ')} | vcf-subset -c #{populations.join(',')} > #{tmpdir+tmpfile}`
+	
+	#calculate site-pi
+	out = `vcftools --vcf #{tmpdir+tmpfile} --out #{tmpdir+tmpfile+'2'} --site-pi --weir-fst-pop #{popfile} --weir-fst-pop #{popfile2}`
+	
+	site_pi = dice_text `cat #{tmpdir+tmpfile+'2'}.sites.pi`
+	next if site_pi.length == 0
+	#generate pi_gene
+	pi_gene = site_pi.transpose.last.mean
+
+	#generate pi_gene_nonsynonymous and synonymous...
+
+	#fetch synonymous or nonsynonymous changes in this region present in the selected samples
+	all_vcf = `tabix -h #{snpeff_vcf} #{gff[gene].map{|exon| "#{exon.first}:#{exon[3]}-#{exon[4]}"}.join(' ')} | vcf-subset -c #{populations.join(',')} | grep '1/' | grep SYN`.split("\n")
+	
+	#find synonymous and nonsynonymous sites
+	ns_pos = dice_text all_vcf.select{|t| t.include? 'NON_SYN'}.map{|t| t.split("\t")[0..1].join("\t")}.join("\n")
+	s_pos = dice_text all_vcf.select{|t| t.include? 'SYN' and not t.include? 'NON_SYN'}.map{|t| t.split("\t")[0..1].join("\t")}.join("\n")
+	
+	if synonymity['>'+gene] != nil	
+		synonymity_val, nonsynonymity_val = synonymity['>'+gene].map{|f| f.to_f}
+	else
+		puts gene
+		puts 'blar'
+		next
+	end
+	
+	#calculate syn/nonsyn pi values
+	ns_pos.length != 0 ? ns_pi = site_pi.select{|t| ns_pos.include? t[0..1]}.transpose.last.map(&:to_f).reduce(:+)/nonsynonymity_val : ns_pi = 0
+	s_pos.length != 0 ? s_pi = site_pi.select{|t| s_pos.include? t[0..1]}.transpose.last.map(&:to_f).reduce(:+)/synonymity_val : s_pi = 0
+
+	#output
+	fst = out.split("\n")[-3..-2].map{|t| t.split(' ').last}
+	puts [gene, pi_gene, ns_pi, ns_pos.length, s_pi, s_pos.length, fst.first, fst.last].join("\t")
+
+end

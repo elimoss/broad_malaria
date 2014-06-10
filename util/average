@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+
+nums = ARGF.read.split("\n").map{|t| t.to_f}
+
+if nums == nil or nums.length.to_f == nil or nums.reduce(:+) == nil
+	puts ""
+else
+	puts nums.reduce(:+)/nums.length.to_f
+end

@@ -1,0 +1,29 @@
+#!/usr/bin/env ruby
+
+#no longer returns a list of tabix-formatted (chr:coord) locations.  If the queries had square brackets within them, the coordinate is where the open-bracket occurs.  If not, it is the start of the reference matching sequence.
+
+#for to make the blast db:
+#dustmasker -infmt fasta -parse_seqids -outfmt maskinfo_asn1_bin -out pfal_9.0.asnb  -in PfalciparumAllGenomic_PlasmoDB-6.2.fasta 
+#makeblastdb -dbtype nucl -parse_seqids -mask_data pfal_9.0.asnb -out Pfal_9.0.blast -title "Pfal Ref 9.0" -in
+
+loc = ARGV[0]
+query_or_subject = ARGV[1]
+
+case query_or_subject
+	when "query"
+		q_or_s = "sseq"
+	when "subject"
+		q_or_s = "qseq"
+	else
+		abort("Invalid option. Please specify query or subject.")		
+end
+
+#blastdb = ARGV[1]
+seqs = File.read(loc).split("\n")
+blastdb = "~/moss/refseq/plasmodb/9/blast/Pfal_9.0.blast"
+puts `blastn -db #{blastdb} -query #{loc} -gapopen 3 -gapextend 1 -outfmt "6 #{q_or_s}"`
+
+# used for a special purpose when parsing the given golden gate loci.
+#	inset = query.index("[")
+#	inset = 0 if inset == nil
+#  	query.delete!('[/]')

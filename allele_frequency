@@ -1,0 +1,250 @@
+#!/usr/bin/env ruby
+
+require_relative('MossVCF.rb')
+require 'optparse'
+#Allele frequency counter
+
+
+
+def analyze()
+	parse_options()
+	
+	output = ""
+	output += parse_headers()
+	@options[:output] ? @out.write(output + "\n") : puts(output) 
+	allele_freqs_main()
+	emit_passing_counts_main() if @options[:emit_passing_counts]
+end
+
+
+def allele_freqs_main()		
+	if @options[:genelist]
+		File.read(@options[:genelist_location]).split("\n").each {|gene| process_vcf_chunk `tabix -p vcf #{@input} #{gene}`	}
+	elsif @options[:gff] != nil
+		File.open(@options[:gff]).each_line("\n") do |l|
+			l_s = l.split("\t")
+			process_vcf_chunk `tabix -p vcf #{@input} #{l_s[0]}:#{l_s[3]}-#{l_s[4]}`
+		end
+	elsif @options[:bed] != nil
+		File.open(@options[:bed]).each_line("\n") do |l|
+			l_s = l.split("\t")
+			process_vcf_chunk `tabix -p vcf #{@input} #{l_s[0]}:#{l_s[1]}-#{l_s[2]}`
+		end
+	else
+		#user intervals
+		intervals = []
+		intervals = make_intervals(@options[:interval_index], @options[:total_intervals], @fasta) if @options[:user_intervals] == true
+		#auto-generated intervals
+		(1..2300).each{|index| intervals += make_intervals(index, 2300, @fasta)} if not @options[:user_intervals] == true
+		#do it
+		intervals.each { |interval|	process_vcf_chunk `tabix #{@input} #{interval[0]}:#{interval[1]}-#{interval[2]}` }
+	end
+	
+end
+
+def process_vcf_chunk(vcf)
+	vcf.split("\n").each do |site|
+		oot = allele_freqs_line(site)
+		next if oot == nil
+		@options[:output] ? @out.write(oot + "\n") : puts(oot)
+	end
+end
+
+def allele_freqs_line(line)
+	split_line = line.split("\t")
+	#restrict to variant sites
+	return if split_line[4] == '.'
+	
+	begin
+		effects = split_line[7].split(";")[split_line[7].split(";").map{|t| t[0,3]}.index "EFF"].split("=")[1].split(",")
+		effects = effects.map{|effect| [effect.split("(")[0]]+ effect.split("(")[1].split("|")}
+		effects.each{|e| e.last.delete!(")")}
+	rescue
+		effects = []
+	end
+	num_variants_all_groups = []			
+	groupings = []
+	
+	if @options[:using_groups]
+		abort("Not all indicated groups are present!") if (@desired_groups.flatten & @headers).length < @desired_groups.length 
+		groupings = @desired_groups	
+	else
+		groupings = @headers[9..@headers.length].map{|t| [t]}
+	end
+	
+	groupings.each do |desired_samples| 	#For each of the desired groups
+		missing = false
+		genotyped_samples = 0
+		#initialize with a number of zeros equal to the number of alternative alleles
+		num_variants_this_group = [0]*(split_line[4].split(",").length+1)
+		desired_samples.each do |desired_sample|	#For each of the desired samples within the group
+
+		abort ("#{desired_sample} not found!") if not @headers.include? desired_sample
+			allele = split_line[@headers.index(desired_sample)][0] 	 #get the contents of that sample in the current row
+			missing = true if allele == '.'
+			genotyped_samples += 1 if not allele == '.'
+			num_variants_this_group[allele.to_i] += 1
+		end
+		#chop off the position indicating the number of samples identical to the reference
+		num_variants_this_group.shift
+		num_variants_this_group = num_variants_this_group.select{|t| t != '.'}.map{|n| n = n.to_f / genotyped_samples.to_f} if @options[:using_groups]
+		(missing and not @options[:using_groups]) ? num_variants_all_groups << '.' : num_variants_all_groups << num_variants_this_group.join(",")
+	end
+	return if num_variants_all_groups.map{|t| t.split(",")}.flatten.map{|t| t.to_f}.reduce(:+) == 0 and @options[:variant_only] #restrict to sites that remain variant within subset
+	return if (@options[:biallelic] and line.split("\t")[4].include? ",")#restrict to biallelic sites if desired			
+	return if (@options[:nonsynonymous] and effects != [] and not effects.join.to_s.include? "NON_SYN") 
+
+	#Prepend positions indicating SNP occurrence in the specified sample groups.			
+	return [num_variants_all_groups.join("\t"), split_line[0,2].join("\t"), split_line[3,2].join("\t"), effects.join("\t")].join("\t")
+
+end
+
+
+
+def parse_options()		
+	@options = {:using_groups => false}
+	
+	opt_parser = OptionParser.new do |opt|
+		opt.banner = "Usage: ruby analyze_vcf.rb inVCF.vcf.gz reference.fasta(optional) [OPTIONS]"
+		opt.separator ""
+		opt.separator "reference defaults to ~/moss/refseq/plasmodb/9/genome.fasta"
+		opt.separator ""
+		opt.separator "Options"
+		
+		#MISCELLANEOUS FUNCTIONS
+		opt.on("--columns", "Outputs the column headers and exits.") do
+			@options[:columns] = true
+		end
+
+		opt.on("--samples", "Outputs the column headers corresponding to samples and exits.") do
+			@options[:samples] = true
+		end
+				
+		opt.on("--biallelic", "Restricts the output to biallelic sites.") do
+			#puts "Restricting output to biallelic sites"
+			@options[:biallelic] = true
+		end
+		
+		opt.on("--intervals INDEX,TOTAL", "The index of the current interval being processed and the total number of intervals into which the genome is being divided for processing.") do |idxs|
+			@options[:interval_index] = idxs.split(',')[0]
+			@options[:total_intervals] = idxs.split(',')[1]
+			@options[:user_intervals] = true
+		end
+		
+		opt.on("--groups GROUPFILE", "a file designating the groups of samples to be contrasted within the file.  One file per line, groups separated by line containing '-' alone (no quotes).") do |groupfile|
+			@options[:groups] = groupfile
+			@options[:using_groups] = true
+		#	puts "Using a groupfile."
+					
+			@desired_groups = File.open(@options[:groups]).read.split("-\n")
+			temp = []
+			@desired_groups.each{|group| temp<< group.split("\n")}
+			@desired_groups = temp
+		end
+		opt.separator ""
+		
+		opt.on("--emit_passing_counts", "Emits a one or a zero for each position based on whether that position was callable.") do
+			@options[:emit_passing_counts] = true
+		end
+		
+		opt.on("--variant_only", "Restrict output to sites showing variation within the output subset.") do
+			@options[:variant_only] = true
+		end
+		
+		opt.on("--newids KEY", "Output will include the old PlasmoDB ids.  Left untranslated to older IDs when possible by default.  Must specify translation key file with: <new ID> tab <old ID> per line.  If 'default', tries to find the default key.") do |keyLoc|
+			puts "Translating to old gene ID's."
+			@options[:useOldIDs] = true
+			
+			default = '/home/unix/emoss/moss/refseq/misc/gene_key_old-new.txt'
+			
+			if keyLoc == 'default'
+				temp = File.open(default).read.split("\n").map{|t| t=t.split("\t")}
+			else
+				temp = File.open(keyLoc).read.split("\n").map{|t| t=t.split("\t")}
+			end
+			@key = {}
+			temp.each do |pair|
+				@key[pair[0]] = pair[1]
+			end
+		end
+			
+		opt.on("--nonsynonymous", "Includes only nonsynonymous variants in the output.") do
+			puts "Restricting output to nonsynonymous variants."
+			@options[:nonsynonymous] = true
+		end
+		
+		opt.on("-o OUTPUTFILE","--output OUTPUTFILE", "Specifies the output.  If left out, output will return to standard output.") do |outputLocation|
+			@options[:output] = true
+			@out = File.new(outputLocation, 'w')
+		end
+		
+		opt.on("--genelist LOC", "Supplies a list of genes in plasmoDB genomic location format for analysis.  Input must be a .vcf.gz if this is used.") do |list_loc|
+			@options[:genelist] = true
+			@options[:genelist_location] = list_loc
+		end
+		
+		opt.on("--gff GFF", "Supplies a GFF file containing genomic features to include in analysis.") do |loc| 
+			@options[:gff] = loc
+		end
+		
+		opt.on("--bed BED", "Supplies a bed file containing genomic features to include in analysis.") do |loc| 
+			@options[:bed] = loc
+		end
+		
+		opt.on("--diploid", "Output diploid format") do 
+			@options[:diploid] = true
+		end
+		
+		
+	end
+	
+	opt_parser.parse!	
+	
+	if ARGV.length < 1 or ARGV.length > 2
+		puts opt_parser
+		abort()
+	end	
+	
+	@input = ARGV[0]
+	if ARGV.length == 2
+		@fasta = ARGV[1] 
+	else
+		@fasta = '/seq/plasmodium/moss/refseq/plasmodb/9/genome.fasta'
+	end
+	
+end
+
+
+def parse_headers()
+	tmp = `tabix -h #{@input} 1-1000`.split("\n")
+	@headers = tmp.select{|l| l.include? "CHROM\tPOS"}
+	abort("Headers missing from #{@input} or file unreadable.") if @headers[0] == nil
+	@headers = @headers[0].split("\t")
+	
+	if @options[:columns] #if the user has specified that only the headers are required, spit them out and quit.
+		print @headers.join("\n"); puts
+		abort()
+	end
+
+	if @options[:samples] #if the user has specified that only the sample headers are required, spit them out and quit.
+		print @headers[9..@headers.length].join("\n"); puts
+		abort()
+	end
+			
+	output_headers = []
+	if @options[:cg_coverage]
+		output_headers += ["Average Coverage", "PercentCG"]
+	else
+		if @options[:using_groups]
+			@desired_groups.each{|group| output_headers << "Variant Samples: " + group[0][0,4]}
+		else
+			output_headers = @headers[9..@headers.length]
+		end
+		output_headers += ["Chromosome", "Position", "Reference", "Variant(s)"] + ["Effect", "Impact", "Type", "Codon", "Amino Acid Change", "Coverage Depth", "Protein Name", "Biotype", "Coding", "Transcript ID", "Exon ID"]*4 #Create the rest of the headers
+	end
+	return output_headers.join("\t") + "\n" #write the headers
+			
+end
+
+#do it.
+analyze

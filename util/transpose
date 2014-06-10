@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+
+require '/home/unix/emoss/scripts/kit/util.rb'
+
+text = dice_text ARGF.read
+
+text.transpose.each do |t|
+	puts t.join("\t")
+end

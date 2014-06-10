@@ -1,0 +1,20 @@
+#!/usr/bin/env ruby
+
+abort("Usage: plink_chrom_mapper file.map") if ARGV.length != 1
+
+chroms = `cat #{ARGV[0]} | cut -f1 | uniq | grep -v M766 | grep -v PFC10`.split("\n")
+chroms += ['M76611']
+chroms += ['PFC10_API_IRAB']
+
+
+map = File.open(ARGV[0])
+
+while true
+	foo = map.gets
+	break if foo == nil
+	
+	foo_s = foo.split("\t")
+	
+	puts [chroms.index(foo_s[0]) + 1, foo_s[1], foo_s[2]].join("\t")
+end
+

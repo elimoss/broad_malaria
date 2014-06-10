@@ -1,0 +1,19 @@
+#!/usr/bin/env ruby
+
+records = ARGF.read.split("\n")
+
+headers = records[0].split("\t")
+num_samples = headers.index("Chromosome")
+
+records.drop(1).each do |r|
+	s = r.split("\t")
+	freqs = s[0...num_samples].map{|t| t.to_f}
+	rest_of_line = s[num_samples..s.length]
+	
+	old_freqs = freqs.map{|f| f > 0.5 ? "flipped (was #{f} with this ref/alt)" : f}
+	new_freqs = freqs.map{|f| f > 0.5 ? 1-f : "not flipped (is #{f} with switched ref/alt" }
+	
+	puts [old_freqs, rest_of_line].flatten.join("\t")
+	puts [new_freqs, rest_of_line[0..1], rest_of_line[3], rest_of_line[2], rest_of_line[4..rest_of_line.length]].flatten.join("\t")
+	
+end

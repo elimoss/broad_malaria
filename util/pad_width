@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+
+#input: any tab-delimited array of stuff, number of columns, filler
+#output: input padded to specified width with the specified filler
+abort("Usage: pad_width stuff numcol filler") if ARGV.length != 3
+
+require('/home/unix/emoss/scripts/kit/util.rb')
+
+input = dice_file ARGV[0]
+width = ARGV[1].to_i
+filler = ARGV[2]
+
+puts input.map{|row| row.fill(filler, (row.length)..width).join("\t")}

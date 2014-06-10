@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+
+#input: list of chromosome names, lengths from samtools idxstats | cut -f1,2.  window_size.
+#output: bed-formatted list of windowed genomic intervals
+
+abort("Usage: windowed_bed_maker idxstats_output window_size") if ARGV.length != 2
+
+chroms = File.open(ARGV[0]).read.split("\n").map{|t| t.split("\t")}
+window_size = ARGV[1].to_i
+chroms.each do |chrom|
+	next if chrom[0] == '*'
+	(chrom[1].to_i/window_size.to_f).ceil.times do |window|
+		puts "#{chrom[0]}\t#{(window*window_size + 1).to_s}\t#{[((window+1)*window_size) + 1, chrom[1].to_i].min.to_s}"
+	end
+end

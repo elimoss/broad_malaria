@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+
+tmp = ARGF.read
+
+tmp.each_line("\n") do | l |
+	s = l.split("\t")
+	puts [s[3].split(';')[0].split('=')[1], s[0..2]].join("\t")
+end

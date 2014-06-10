@@ -1,0 +1,137 @@
+#!/usr/bin/env ruby
+
+#Relative Mapping cost Evaluator: ReMaP Evaluator
+
+=begin
+Accepts two BAM files sorted by read name, and outputs per read:
+1. delta (mismatches + indels)
+2. delta MQ
+=end
+
+class String
+	def is_less query
+		s = self.split(':')
+		q_s = query.split(':')
+		s.each_index do |i|
+			if i == 0
+				return true if s[i] < q_s[i]
+			else
+				return true if s[i].to_i < q_s[i].to_i
+			end
+		end
+		return false
+	end
+end
+
+def split_cigar(cig)
+	split = cig.scan /\p{Alpha}+|\p{Digit}+/u
+	split = split.map{|thing|thing.scan(/\p{Digit}/).empty? ? thing : thing.to_i}
+	grouped = [split.values_at(* split.each_index.select {|i| i.even?}),
+	split.values_at(* split.each_index.select {|i| i.odd?})].transpose
+	return grouped
+end
+
+def local_mate_pair?(read)
+	return (read[2] == read[6]) ? 1 : 0
+end
+
+def get_aligned_read_cost(read)
+
+	read_name, chrom, mapped_start, split_cigar, seq = [read[0]] + [read[2]] + [read[3].to_i] + [split_cigar(read[5])] + [read[9]] + [read[6]]
+	aligned_read = ''
+	
+	mm_d_i = 0
+	
+	split_cigar.each do |cig|
+		case cig[1]
+			when 'M', 'N'
+				aligned_read += seq[0...cig[0]]
+				seq = seq[cig[0]...seq.length]
+			when 'I'
+				seq = seq[cig[0]...seq.length]
+				aligned_read += (['-'] * cig[0]).join
+				mm_d_i += cig[0]
+			when 'D'
+				aligned_read += (['-'] * cig[0]).join
+				mm_d_i += cig[0]
+			when 'S', 'H'
+				seq = seq[cig[0]...seq.length]
+		end
+	end
+
+	ref_seq = `samtools faidx #{@ref} #{chrom}:#{mapped_start}-#{mapped_start + aligned_read.length - 1}`.split("\n").drop(1).join
+#	puts ref_seq
+#	puts aligned_read
+#	puts '--'
+	aligned_read.split('').each_index do |i|
+		mm_d_i += 1 if aligned_read[i] != ref_seq[i]
+	end
+	
+	#penalize inter-chromosomal read pair mapping
+#	mm_d_i += 10 if local_mate_pair?(read) == 0
+	return mm_d_i
+end
+
+abort("Usage: remap_eval bam1 bam2 (refseq) ") if ARGV.length != 2 and ARGV.length != 3
+
+bam1 = ARGV[0]
+bam2 = File.open(ARGV[1], 'r')
+if ARGV.length == 3
+	@ref = ARGV[2] 
+else
+	@ref = '~/9/genome.fasta'
+end
+
+match = bam2.gets.split("\t")
+match = bam2.gets.split("\t") while match[0].include? '@' 
+#prev_match = ''
+
+unmapped = 0
+remapped = 0
+low_qual = 0
+same_chromosome = []
+costs = []
+
+IO.foreach(bam1) do |l|
+	#skip headers
+	next if l[0] == '@' 
+	#parse line
+	s = l.split("\t")
+		
+	#skip poor quality reads
+	if s[10].include? '#'
+		low_qual += 1
+		next
+	end
+
+#	puts 'current: ' + s[0]
+	
+	#increment match until it is level with or exceeds the lexigraphical ordinality of the current read
+	while match[0].is_less(s[0]) or (match[0] == s[0] and match[9] != s[9])
+		match = bam2.gets.split("\t")
+#		print 'possibl: ' + match[0]
+#		print "\r"
+
+	end	
+	#the match was not found.  probably unmapped.
+	if s[0] != match[0] or match[9] != s[9]
+#		puts "Match not found. De-mapping likely."
+		unmapped += 1
+		next 
+	else
+		remapped += 1
+	end
+	
+	#s and match are now the same read based on read name and sequence.  
+	
+	#compute delta mapping quality
+#	puts match[4].to_i - s[4].to_i
+	
+	#output
+	costs += [(get_aligned_read_cost(match) - get_aligned_read_cost(s))]
+	same_chromosome += [[local_mate_pair?(match), local_mate_pair?(s)]]
+	avg_d_local_mate_pairs = ((same_chromosome.transpose[0].reduce(:+) - same_chromosome.transpose[1].reduce(:+))/remapped.to_f).round(3)
+	
+	print "Remapped: #{remapped} Unmapped: #{unmapped} LowQual: #{low_qual} Avg Delta Cost: #{(costs.reduce(:+)/remapped.to_f).round(3)} Delta Colocalized Pair Rate: #{avg_d_local_mate_pairs}\r" #if remapped % 1000 == 0
+end
+

@@ -1,0 +1,66 @@
+#!/usr/bin/env ruby
+
+#in: sample, location list file
+#out: haplotype fractions occurring at each location
+
+require_relative('seq_coi_methods.rb')
+require 'rinruby'
+require('/home/unix/emoss/scripts/kit/util.rb')
+abort("Usage: seq_coi bamfile (sample_idx) loc_list loc_idx") if ARGV.length != 4 and ARGV.length != 3
+#loclist format: chromosome\tloc1,loc2,loc3...
+
+if ARGV.length == 4
+	sample = File.open(ARGV[0]).read.split("\n")[ARGV[1].to_i - 1]
+	loc_filepath = ARGV[2]
+	index = ARGV[3]
+elsif ARGV.length == 3
+	sample = ARGV[0]
+	loc_filepath = ARGV[1]
+	index = ARGV[2]
+end
+
+locs = parse_locs_table(loc_filepath, index)
+
+#PARAMETERS
+#loci
+subset_size = 100
+min_locus_quality = 0
+min_read_mq = 0
+max_polymorphic_locus_minor_allele_freq = 1
+biallelic = true
+
+#haplotypes
+min_haplotype_frequency = 0
+min_haplotype_fraction_of_major = 0.02
+min_passing_reads = 20
+false_polymorphism_rate = 0
+cluster = false #I don't believe clustering makes sense.  meaningful haplotypes can be one base apart!
+remove_singletons = true
+
+verbose = true
+
+headers(verbose)
+
+haplo_report = locs.map{ |location|
+	#FILTER MONOMORPHIC BASES
+	
+	loci = get_base(sample, location, min_quality = min_locus_quality)
+	
+	mafs = report_allele_frequencies(loci, location, silent = true)
+	loci = filter_monomorphic_biallelic_loci(loci, mafs, max_freq = max_polymorphic_locus_minor_allele_freq, biallelic, verbose)
+
+	#ASSEMBLE HAPLOTYPES
+										#NAAAAAAAAAAAAAH	#CLUSTER HAMMING_D=1 NEIGHBORS
+	#REMOVE SINGLETONS
+	#FILTER HAPLOTYPES
+	haplos = assemble_haplotypes(loci) 
+		haplos.uniq.each {|h| puts "#{haplos.count(h)}\t#{h.join}"} if verbose; puts '--' if verbose
+#	haplos = cluster_neighbors(haplos, hamming_distance = min_hamming_distance, minority_haplotype_threshold = minority_haplotype_threshold_to_try_hamming_distance_join)
+#	haplos = cluster_neighbors_2(haplos, false_polymorphism_rate, verbose) if cluster == true
+	haplos = remove_singleton_haplotypes(haplos) if remove_singletons == true
+		haplos.uniq.each {|h| puts "#{haplos.count(h)}\t#{h.join}"} if verbose
+	report_haplo_frequencies(location, haplos, freq_threshold = min_haplotype_frequency, freq_fraction_threshold = min_haplotype_fraction_of_major, depth_threshold = min_passing_reads, loci, verbose).flatten
+}
+
+#STATISTICAL BACK END
+call_coi(haplo_report)

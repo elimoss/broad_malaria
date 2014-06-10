@@ -1,0 +1,190 @@
+#!/usr/bin/env ruby
+
+=begin
+A tool for identifying interesting SNPs from drug selection experiments.
+Selectable functionality:
+-identify polymorphisms with parent-daughter discordance
+-select for nonsynonymous polymorphism
+-individually remove highly polymorphic gene families (var, rifin, stevor, maurer's 2 cleft, clag)
+-remove sites uncalled in the parent
+
+In addition, this script retains the VCF file header with annotation for this analysis added, and if bgzip and tabix are available within the environment, compresses and indexes the output.  Absent an output filename, prints to STDOUT.
+
+Data is processed in chunks in order to minimize memory footprint.
+
+=end
+
+
+TOTAL_INTERVALS = 1000
+
+
+require '/home/unix/emoss/scripts/kit/util.rb'
+require '/home/unix/emoss/scripts/kit/MossVCF.rb'
+require 'optparse'
+
+def parse_options()		
+
+	#defaults
+	@parent = nil
+	@nonsyn = false
+	@remove_parental_uncalled = false
+	@remove = false
+	@invariant = false
+	@parent_called = false
+	@snp = false
+	@discord = false
+	@moderate = false
+	@exclude = []
+	
+	@out = nil
+	
+	opt_parser = OptionParser.new do |opt|
+		opt.banner = "Usage: drug_selection_winnower merged_annotated_VCF.vcf.gz reference.fasta [OPTIONS]"
+		opt.separator ""
+		opt.separator "Options"
+		
+		opt.on("--discord PARENT_ID", "Restrict output to sites containing at least one disagreement between parental and daughter strain.  Implicitly applies --parent_called.") do |parent_id|
+			@parent = parent_id
+			@discord = true
+		end
+
+		opt.on("--moderate_or_high", "Restrict output to 'moderate' and 'high' polymorphisms (as annotated by snpEff) (requires functional annotations)") do
+			@moderate = TRUE
+		end
+
+		opt.on("--nonsyn", "Restrict output to nonsynonymous polymorphisms (requires functional annotations)") do
+			@nonsyn = TRUE
+		end
+
+		opt.on("--exclude SAMPLE", "Exclude named sample from analysis (can be specified multiple times)") do |samp|
+			@exclude << samp
+		end
+		
+		opt.on("--snp", "Restrict output to mononucleic polymorphisms (requires functional annotations)") do
+			@snp = TRUE
+		end
+		
+		opt.on("--remove", "Remove VAR, RIF, stevor gene families from output") do
+			@remove = true
+		end
+		
+		opt.on("--parent_called PARENT_ID", "Restrict output to sites called in parent") do |parent_id|
+			@parent_called = true
+			@parent = parent_id
+		end
+		
+		opt.on("--invariant", "Include invariant sites in output") do
+			@invariant = true
+		end
+		
+		opt.on("--out FILENAME", "Output to file (outputs to STDOUT by default).  .vcf will be appended, and the output will be bgzipped and tabix'd.  Warning: will overwrite namesakes.") do |filename|
+			@out = filename
+		end		
+		
+	end
+	all_args = ARGV.dup
+	opt_parser.parse!
+
+	if ARGV.length != 2
+		puts opt_parser
+		abort()
+	end	
+	
+	@vcf = ARGV.first
+	@ref = ARGV.second
+	
+	return all_args
+end
+
+def parse_header(commands)	
+	out = []
+	header = `tabix -h #{@vcf} blar`
+	@cols = dice_text(header).last
+	s = header.split("\n")
+	out << s[0...(s.length - 1)]
+	out << "##drug_selection_winnower=#{commands.join(' ')}"
+	
+	
+	temp_cols = s.last.split("\t")
+	@exclude.each{|e| abort("#{e} not found!") if not @cols.include?(e); temp_cols.delete_at(temp_cols.index(e))} #make sure excluded sample is present and excluded
+	out << temp_cols.join("\t")
+	return out
+end
+
+def output(new_header)
+	if @out != nil
+		@out += '.vcf' if not @out.include? '.vcf'
+		output_file = File.open(@out, 'w')
+		output_file.write(new_header.join("\n") + "\n")
+	else
+		puts new_header
+	end
+	
+	TOTAL_INTERVALS.times do |i|
+		
+		intervals = make_intervals(i+1, TOTAL_INTERVALS, @ref)
+		formatted_intervals = intervals.map{|int| "#{int.first}:#{int.second}-#{int.third}"}
+
+		`tabix #{@vcf} #{formatted_intervals.join(' ')}`.each_line("\n") do |l|
+			s = l.split("\t").map{|t| t.strip}
+			
+			next if (l.include? 'stevor' or l.include? 'VAR' or l.include? 'RIF' or l.include? 'EMP' or l.include? 'var-like') and @remove
+
+			next if (!l.include? 'NON_SYN' and @nonsyn)
+			
+			next if ((!l.include? 'MODERATE' and !l.include? 'HIGH') and @moderate)
+			
+			next if ((s[3].split('').length > 1 or s[4].split('').length > 1) and @snp)
+			
+			next if (l.include? 'ReferenceInAll' and not @invariant)
+			
+			abort("Parent #{@parent} not found!") if (@parent_called or @discord) and not @cols.include? @parent
+			
+			next if @parent_called and s[@cols.index(@parent)] == './.'
+			
+			if @discord
+				next if s[@cols.index(@parent)] == './.' 
+				parental_genotype = s[@cols.index(@parent)][0].to_i
+
+				temp_cols = Marshal.load(Marshal.dump(@cols))
+				
+				#exclude anything to be excluded
+				@exclude.each do |shunnee|
+					abort("#{shunnee} not found!") if not temp_cols.include? shunnee
+					
+					s.delete_at(temp_cols.index(shunnee))
+					temp_cols.delete_at(temp_cols.index(shunnee))
+				end
+				
+				daughter_genotypes = Marshal.load(Marshal.dump(s))
+				daughter_genotypes.delete_at(temp_cols.index(@parent))
+				daughter_genotypes.slice!(0..8) #clear out non-allele cruft
+				daughter_genotypes = daughter_genotypes.map{|t| t[0]}
+				
+				next if not daughter_genotypes.select{|g| g != '.'}.map(&:to_i).include?((parental_genotype - 1).abs)
+				
+			end
+			
+			if @out == nil
+				puts s.join("\t")
+			else
+#				output_file.write("\n")
+				output_file.write(s.join("\t") + "\n")
+			end
+		end
+		
+	end
+	
+	if @out != nil
+		output_file.close()
+		begin
+			`yes | bgzip #{@out} > /dev/null 2> /dev/null`
+			`tabix -f -p vcf #{@out}.gz`
+		rescue
+			puts "Couldn't compress or index the output."
+		end
+	end
+end
+
+
+output(parse_header(parse_options))

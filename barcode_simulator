@@ -1,0 +1,37 @@
+#!/usr/bin/env ruby
+
+#input
+abort("Usage: barcode_simulator merged_vcf.vcf.gz loci_list samples ('oneperline' here if you want each sample to have its own output)") if ARGV.length < 3 or ARGV.length > 4
+
+vcf = ARGV[0]
+loci = File.open(ARGV[1]).read.split("\n").map{|t| t.split("\t")}
+samples = File.open(ARGV[2]).read.split("\n")
+oneperline = true if ARGV.length == 4 and ARGV.last == 'oneperline'
+
+#loci input format: chrom <tab> coord
+
+records = `tabix #{vcf} #{loci.map{|t| t[0]+':'+t[1]+'-'+t[1]}.join(' ')}`.split("\n").map{|n| n.split("\t")}
+headers = `allele_frequency #{vcf} --columns`.split(' ')
+
+
+cols = samples.map{|g| headers.index(g)}
+barcodes = records.map{|record| cols.map{|c| record[c][0] == '.' ? '.' : [record[3], record[4].split(",")].flatten.join[record[c][0].to_i]}}.transpose
+barcodes = barcodes.map {|b|  b.join}
+samples_barcodes = [barcodes, samples].transpose
+barcode_lookup = {}
+samples_barcodes.each {|sb| barcode_lookup[sb[0]] == nil ? barcode_lookup[sb[0]] = [sb[1]] : barcode_lookup[sb[0]] << sb[1]}
+#print barcode_lookup
+
+counts = barcodes.uniq.map{|u|[u, barcodes.count(u)]}
+counts = counts.sort{|a,b| a[1] <=> b[1]}
+
+counts.each do |count|
+
+	if oneperline
+		barcode_lookup[count[0]].each do |sample|
+			puts [sample, count[0]].join("\t")
+		end
+	else
+		puts [count, barcode_lookup[count[0]]].join("\t")
+	end
+end

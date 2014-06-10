@@ -1,0 +1,21 @@
+#!/usr/bin/env ruby
+
+require '~/scripts/kit/util.rb'
+
+abort("Usage: gene_pi vcf.gz genes.list gff populations") if ARGV.length != 3
+
+vcf = ARGV[0]
+genes = dice_file ARGV[1]
+gff = File.open(ARGV[2]).read.split("\n")
+pops = dice_file ARGV[3]
+
+
+genes.each do |gene|
+	exons = gff.select{|l| l.include? gene and l.include? 'exon'}
+	gff_gene = gff.select{|l| l.include? gene and l.include? 'gene'}
+	
+	but "There are multiple records matching the gene #{gene}:\n#{gff_gene.join("\n")}" if gff_gene.length > 1
+	but "No matching genes found for #{gene}" if gff_gene.length == 0
+	
+	
+end

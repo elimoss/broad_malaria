@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+
+#in: sample, comma-delimited range
+#out: suitable sites for haplotyping in format ready for bam_coi
+
+=begin
+
+criteria:
+
+1. individual site depth is at least 100
+1a. those 100 reads must have mapping quality of 30 or greater
+2. no var, stevor, rif
+3. min allele freq at each site is 0.98
+4. at least 4 suitable sites within each interval
+	-interval size = 100bp
+
+=end
+
+abort("Usage: site_finder sample loc_list loc_idx gff.gz") if ARGV.length != 4
+
+require_relative('methods.rb')
+
+sample = ARGV[0]
+loc_filepath = ARGV[1]
+loc_idx = ARGV[2]
+gff = ARGV[3]
+
+locs = parse_locs_table(loc_filepath, loc_idx)
+
+haplo_report = []
+
+locs.each do |location|
+	interval_size = 100
+	interval_count = ((location[1][1] - location[1][0]) / interval_size) + 1
+	interval_count.times do |current_interval|
+		current_location = [location[0], 
+						[location[1][0]+(interval_size*current_interval), 
+						location[1][0]+(interval_size*(current_interval + 1))]]
+		
+		all_positions = [location[0], 
+						(location[1][0]+(interval_size*current_interval).. 
+						(location[1][0]+(interval_size*(current_interval + 1)))).to_a]
+		
+		reads = get_reads(sample, current_location, silent = true)
+		loci = get_base(reads, all_positions, min_quality = 0, min_map = 0)
+		allele_freqs = report_allele_frequencies(loci, current_location, silent = true)
+		haplos = assemble_haplotypes(loci)
+		haplo_report << report_haplo_frequencies(haplos, freq_threshold = 0.01, depth_threshold = 30).flatten
+		puts haplo_report
+		#suitable_loci = filter_locus_depth_and_gene(allele_freqs, current_location, gff, min_freq = 0.9, min_depth = 30, min_sites = 4) 
+		
+		#puts "#{location[0]}\t#{suitable_loci.join(',')}" if not suitable_loci == nil
+	end
+end

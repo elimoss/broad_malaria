@@ -1,0 +1,11 @@
+#!/usr/bin/env ruby
+
+abort("Usage: make_ped base.ped allele_freqs") if ARGV.length != 2
+
+base = File.open(ARGV[0]).read.split("\n").map{|blar| blar.split("\t")}
+freqs = File.open(ARGV[1]).read.split("\n").map{|blar| blar.split("\t")}
+
+base.each do |sample_line|
+	freqs_column = freqs[0].index(sample_line[0])
+	puts [sample_line, freqs.map{|t| [t[freqs_column], t[freqs_column]]}.drop(1)].join("\t")
+end

@@ -1,0 +1,41 @@
+#!/usr/bin/env ruby
+
+=begin
+input: file with two lists of names as per following:
+
+item1
+item2
+-
+item1
+item2
+
+Or two separate list as per following:
+
+File 1:
+item1
+item2
+
+File2: 
+item1
+item2
+
+=end
+
+list1 = nil
+list2 = nil
+
+if ARGV.length == 1
+	list = File.open(ARGV[0]).read
+	list1 = list.split("-")[0]
+	list2 = list.split("-")[1]
+elsif ARGV.length == 2
+	list1 = File.open(ARGV[0]).read
+	list2 = File.open(ARGV[1]).read
+elsif ARGV.length > 3 or ARGV.length < 1
+	abort("Usage: list_intersection.rb [twolists.txt OR list1.txt list2.txt]")
+end
+
+list1 = list1.split("\n")
+list2 = list2.split("\n")
+
+puts list1.select{|i| list2.include? i}

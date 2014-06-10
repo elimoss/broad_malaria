@@ -1,0 +1,36 @@
+#!/usr/bin/env ruby
+
+header = true
+ARGF.read.each_line("\n") do |l|
+	s = l.split(' ')
+	if header
+		header = false
+		puts s.join("\t").chomp + "\tLocation\t" + "seqname	source	feature	start	end	score	strand	frame	attributes	comments"
+		next
+	end
+	
+	go_on = false
+	
+	locus = s[1].split("-")[0]+':'+(s[1].split("-")[1].to_i).to_s+'-'+(s[1].split("-")[1].to_i).to_s
+	genes = `tabix ~/9/genes.gff.gz #{locus}`.split("\n")
+	if genes.length != 0
+		puts s.join("\t").chomp + "\tIntragenic\t" + genes[0].chomp.gsub(';',"\t") 
+		go_on = true
+	end
+	next if go_on
+	
+	locus = s[1].split("-")[0]+':'+(s[1].split("-")[1].to_i - 2000).to_s+'-'+(s[1].split("-")[1].to_i).to_s
+	genes = `tabix ~/9/genes.gff.gz #{locus}`.split("\n")
+	if genes.length != 0
+		puts s.join("\t").chomp + "\t2kbDownstream\t" + genes[0].chomp.gsub(';',"\t") 
+		go_on = true
+	end
+	next if go_on
+	
+	
+	locus = s[1].split("-")[0]+':'+(s[1].split("-")[1].to_i).to_s+'-'+(s[1].split("-")[1].to_i + 2000).to_s
+	genes = `tabix ~/9/genes.gff.gz #{locus}`.split("\n")
+	if genes.length != 0
+		puts s.join("\t").chomp + "\t2kbUpstream\t" + genes[0].chomp.gsub(';',"\t") 
+	end
+end

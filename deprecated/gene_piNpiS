@@ -1,0 +1,98 @@
+#!/usr/bin/env ruby
+
+abort("Usage: gene_piNpiS vcf.gz groups.txt gff interval_idx total_intervals (ref)") if ARGV.length != 5 and  ARGV.length != 6
+
+input = ARGV[0]
+groupfile = File.open(ARGV[1]).read.split("\n")
+genes = `cat #{ARGV[2]}`.split("\n")
+interval_idx = ARGV[3].to_i
+total_intervals = ARGV[4].to_i
+gene_subset = genes[(interval_idx - 1)*(genes.length/total_intervals)...(interval_idx)*(genes.length/total_intervals)]
+tmp_vcf = '/broad/hptmp/emoss/scratch.vcf'
+tmp_gff = '/broad/hptmp/emoss/scratch.gff'
+tmp_freqs = '/broad/hptmp/emoss/scratch.freqs'
+ARGV.length == 6 ? ref = ARGV[5] : ref = ''
+
+@codons = {'TTT'=>2, 'TCT'=>6, 'TAT'=>2, 'TGT'=>2,
+'TTC'=>2, 'TCC'=>6, 'TAC'=>2, 'TGC'=>2,
+'TTA'=>6, 'TCA'=>6, 'TAA'=>3, 'TGA'=>3,
+'TTG'=>6, 'TCG'=>6, 'TAG'=>3, 'TGG'=>1,
+'CTT'=>6, 'CCT'=>4, 'CAT'=>2, 'CGT'=>6,
+'CTC'=>6, 'CCC'=>4, 'CAC'=>2, 'CGC'=>6,
+'CTA'=>6, 'CCA'=>4, 'CAA'=>2, 'CGA'=>6,
+'CTG'=>6, 'CCG'=>4, 'CAG'=>2, 'CGG'=>6,
+'ATT'=>3, 'ACT'=>4, 'AAT'=>2, 'AGT'=>6,
+'ATC'=>3, 'ACC'=>4, 'AAC'=>2, 'AGC'=>6,
+'ATA'=>3, 'ACA'=>4, 'AAA'=>2, 'AGA'=>6,
+'ATG'=>1, 'ACG'=>4, 'AAG'=>2, 'AGG'=>6,
+'GTT'=>4, 'GCT'=>4, 'GAT'=>2, 'GGT'=>4,
+'GTC'=>4, 'GCC'=>4, 'GAC'=>2, 'GGC'=>4,
+'GTA'=>4, 'GCA'=>4, 'GAA'=>2, 'GGA'=>4,
+'GTG'=>4, 'GCG'=>4, 'GAG'=>2, 'GGG'=>4,
+'' => 0}
+
+def pi_line(l, cols, gene_start, headers)
+	s = l.split("\t")	
+	
+	ref = s[headers.index('Reference')]
+	alt = s[headers.index('Variant(s)')]
+	pos = s[headers.index('Position')].to_i
+	eff = s[headers.index('Effect')]
+
+	return unless (eff == 'SYNONYMOUS_CODING' or eff == 'NON_SYNONYMOUS_CODING')
+	
+	new_codon = s[headers.index('Codon')].split("/")[0].upcase
+	old_codon = s[headers.index('Codon')].split("/")[1].upcase
+		
+	synonymous = eff != 'NON_SYNONYMOUS_CODING'
+
+	freqs = cols.map{|c| s[c][0].to_i }
+
+	return if freqs.include? 2
+
+	pi = freqs.select{|f| f ==1}.length * freqs.select{|f| f == 0}.length / freqs.length.to_f
+
+	#normalize by degeneracy by synonymous or nonsynonymous alternates
+	if synonymous
+		pi = pi/@codons[new_codon].to_f
+	else
+		pi = pi/(27-@codons[old_codon].to_f).to_f
+	end
+
+	return pi, synonymous
+end
+
+puts "gene\tpiN/piS\tpiN\tpiS"
+gene_subset.each do |current_gene|
+	pi_collection = []
+	s = current_gene.split("\t")
+	start = s[3]
+	finish = s[4]
+	chrom = s[0][0...(s[0].length)]
+	
+	id = s.last.split(';').select{|t| t.include?('web_id')}[0].split('=')[1]
+
+	#`tabix -h #{input} #{chrom}:#{start}-#{finish} > #{tmp_vcf}`
+	#`bgzip -f #{tmp_vcf}`
+	#`tabix -f -p vcf #{tmp_vcf}.gz`
+	
+	File.open(tmp_gff, 'w').write(current_gene)
+	freqs = "allele_frequency #{input} #{ref} --gff #{tmp_gff}".split("\n")
+	freq_header = freqs[0].split("\t")
+	
+	group = groupfile.map{|sample| freq_header.index(sample)}
+
+	freqs = freqs.drop(1)
+	
+	seq = `samtools faidx #{ref} #{chrom}:#{start}-#{finish}`
+
+	seq_codons = seq.split("\n").drop(1).join().split('').each_slice(3).to_a
+	
+	pi_collection = freqs.map{|f| pi_line(f, group, start, freq_header)}.select{|t| t != nil}
+	
+	pi_syn = pi_collection.select{|p| p[1] == true}.map{|q| q[0]}.reduce(:+) / (finish.to_i - start.to_i).to_f if not pi_collection.select{|p| p[1] == true}.map{|q| q[0]}.reduce(:+) == nil
+	
+	pi_nonsyn = pi_collection.select{|p| p[1] == false}.map{|q| q[0]}.reduce(:+) / (finish.to_i - start.to_i).to_f if not pi_collection.select{|p| p[1] == false}.map{|q| q[0]}.reduce(:+) == nil
+	
+	puts [id, pi_nonsyn/pi_syn, pi_nonsyn, pi_syn].join("\t") unless pi_nonsyn == nil or pi_syn == nil
+end

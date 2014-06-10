@@ -1,0 +1,9 @@
+#!/usr/bin/env ruby
+
+require '/home/unix/emoss/scripts/kit/util.rb'
+
+bam = ARGV.first
+stats = dice_text `samtools idxstats #{bam}`
+mapped = stats.transpose[2].map(&:to_i).sum
+total = stats.transpose.last.last.to_i + stats.transpose[2].map(&:to_i).sum
+puts [mapped, total, mapped/total.to_f].map(&:to_s).join("\t")

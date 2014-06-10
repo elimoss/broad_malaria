@@ -1,0 +1,16 @@
+#!/usr/bin/env ruby 
+
+require('~/scripts/kit/util.rb')
+abort("Usage: haplotype_diversity_vcf master_vcf intervals.bed sample1,sample2,sample3... ") if ARGV.length != 3
+
+vcf = ARGV[0]
+bed = dice_file ARGV[1]
+samples = ARGV[2]
+
+bed.each do |interval|
+	raw_vcf = dice_text `tabix -h #{vcf} #{interval[0]}:#{interval[1]}-#{interval[2]} | vcf-subset -c #{samples} | grep -v '#' | grep -P '\t1/' | grep -v '\\./\\.'`
+	haplotypes = raw_vcf.map{|line| line[9..line.length].map{|t| t[0]}}.transpose.map{|blar| blar.join.split('')}
+#	haplotypes.uniq.map{|h| puts h.join}
+	puts [interval + [[haplotypes.uniq.length, 1].max]].join("\t") #if haplotypes.uniq.length > 0 and haplotypes[0].length >= 3
+end
+ 

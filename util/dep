@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+if [ $# != 1 ]
+	then echo "Usage: dep file"
+	else
+
+	
+
+		if [ ! -d deprecated ]
+			then mkdir deprecated
+		fi
+
+		mv $1 deprecated
+fi

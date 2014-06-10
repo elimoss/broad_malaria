@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+
+out = `tabix #{ARGV.join(' ')}`
+puts out

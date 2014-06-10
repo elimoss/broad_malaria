@@ -1,0 +1,69 @@
+#!/usr/bin/env ruby
+
+#in: sample, location list file
+#out: haplotype fractions occurring at each location
+
+require_relative 'methods.rb'
+require 'parallel'
+require '/home/unix/emoss/scripts/kit/util.rb'
+abort("Usage: bam_coi bamfile (sample_idx) loc_list loc_idx") if ARGV.length != 4 and ARGV.length != 3
+#loclist format: chromosome\tloc1,loc2,loc3...
+
+if ARGV.length == 4
+	sample = File.open(ARGV[0]).read.split("\n")[ARGV[1].to_i - 1]
+	loc_filepath = ARGV[2]
+	index = ARGV[3]
+elsif ARGV.length == 3
+	sample = ARGV[0]
+	loc_filepath = ARGV[1]
+	index = ARGV[2]
+end
+
+locs = parse_locs_table(loc_filepath, index)
+
+#PARAMETERS
+#loci
+trim = FALSE
+min_allele_occurrence = 0
+min_locus_quality = 0
+min_read_mq = 0
+
+min_passing_reads = 0
+false_polymorphism_rate = 0.05
+min_haplo_occurrence = 0.005 #false_polymorphism_rate / 10
+min_read_occurrence = 0
+remove_singleton_haplos = true
+
+
+verbose = false
+output_fasta = false
+
+parallelism = 10 #shuffles the order of outputs if not 0
+
+Parallel.each(locs, :in_processes => parallelism) do |location|
+	reads = get_reads(sample, location, verbose, min_read_mq, min_read_occurrence)
+	n_filter(reads, verbose)
+	
+	if reads == nil or reads.length == 0
+		puts '0'
+		next
+	end
+	
+	next if reads.map{|r| r.first}.sum < min_passing_reads
+	haplos = get_base(reads, location, min_quality = min_locus_quality, trim, min_allele_occurrence)
+	frequency_threshold(haplos, min_haplo_occurrence, remove_singleton_haplos, verbose)
+	if haplos == nil or haplos.length == 0
+		puts '0'
+		next
+	end
+	
+	haplos = coalesce(haplos, false_polymorphism_rate, verbose, output_fasta)
+	fasta = generate_fasta(haplos, location, sample) 
+	if output_fasta
+		puts fasta 
+	else
+		puts fasta.length
+	end
+	
+#	pid, size = `ps ax -o pid,rss | grep -E "^[[:space:]]*#{$$}"`.strip.split.map(&:to_i) #memory consumption
+end

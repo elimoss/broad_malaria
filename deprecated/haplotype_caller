@@ -1,0 +1,18 @@
+#!/usr/bin/env ruby
+
+abort("Usage: haplotype_caller reference.fasta input_index output.vcf input(s).bam ") if ARGV.length < 4
+gatk = '/humgen/gsa-hpprojects/GATK/bin/GenomeAnalysisTK-2.4-9-g532efad/GenomeAnalysisTK.jar'
+ref = ARGV[0]
+input_index = ARGV[1].to_i
+output = ARGV[2]
+input = ARGV[3..ARGV.length]
+
+
+input_bam = input[input_index]
+
+
+`java -jar #{gatk} -T HaplotypeCaller -R #{ref} -I #{input_bam} -stand_call_conf 50.0 -stand_emit_conf 10.0 -o #{output} --minPruning 3 --output_mode EMIT_ALL_SITES`
+
+
+#currently testing:
+bsub -J testHC -o log -q week -W 60:00 -M 4 java -jar /humgen/gsa-hpprojects/GATK/bin/GenomeAnalysisTK-2.4-9-g532efad/GenomeAnalysisTK.jar -T HaplotypeCaller -R /home/unix/emoss/moss/refseq/plasmodb/9/genome.fasta -I /home/unix/emoss/bam/SenT133.11.bam -stand_call_conf 50.0 -stand_emit_conf 10.0 -o SenT133.11.HC.vcf  --output_mode EMIT_ALL_SITES --minPruning 2

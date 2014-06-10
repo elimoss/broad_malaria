@@ -1,0 +1,13 @@
+#!/usr/bin/env ruby
+
+java -jar 
+
+
+
+=begin
+bsub -J merge[1-100] -o merge.log -M 2 python ~/scripts/dpark/dannyscripts/snp_call.py vcf_merge --gatkPath=/humgen/gsa-hpprojects/GATK/bin/GenomeAnalysisTK-2.2-9-g54ae978 --interval_total=100 --interval_idx=\$LSB_JOBINDEX /seq/plasmodium/wirth_lab/alukens/snpeff/*.vcf.gz ~/9/genome.fasta merging/\$LSB_JOBINDEX.vcf.gz
+
+
+bsub -o comp.log java -jar ~/moss/tools/GATK.jar -T SelectVariants -R ~/9/genome.fasta --variant merged.vcf.gz --discordance /seq/plasmodium/wirth_lab/alukens/snpeff/F1120-WT_snpeff.vcf.gz -o comparison.vcf.gz --exclude_sample_file exclude_sample.txt
+
+=end

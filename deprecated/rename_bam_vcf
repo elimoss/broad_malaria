@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+require '~/scripts/kit/util.rb'
+
+#in: old-new sample names bams vcfs
+#does: locates the bam and vcf (if any) containing each item in the first column of the old-new list, then submits the appropriate renaming job.
+
+#python ~/scripts/dpark/dannyscripts/snp_call.py vcf_rename invcf oldsamp=newsamp outvcf
+#python snp_call.py rename_bam inBam sampleName outBam
+
+abort("Usage: rename_bam_vcf old-new_sample_names dest_dir bams vcfs") if ARGV.length < 3
+
+key = dice_file ARGV.first
+outdir = ARGV.second
+bamvcf = ARGV[2..ARGV.length]
+bams = bamvcf.select{|bv| bv.include? 'bam'}
+vcfs = bamvcf.select{|bv| bv.include? 'vcf'}
+
+abort ("Invalid input") if not bams.length + vcfs.length == bamvcf.length
+
+vcf_sample_mapping_raw = vcfs.map{|v| [`tabix -h #{v} 1-1 | tail -1`.split("\t").last.chomp, v]}
+vcf_sample_mapping = Hash[*vcf_sample_mapping_raw.flatten]
+
+bam_sample_mapping_raw = bams.map{|b| [`samtools view #{b} -H | grep RG | grep -P -o 'SM:.*\t' | head -1 | sed 's/SM://g'`.chomp.delete("\t"), b]}
+bam_sample_mapping = Hash[*bam_sample_mapping_raw.flatten]
+
+key.each do |from, to|
+	abort ("Sample not found") if vcf_sample_mapping[from] == nil and bam_sample_mapping[from] == nil
+	if vcf_sample_mapping[from] != nil
+		#submit vcf renaming job
+		file = vcf_sample_mapping[from]
+		puts "Renaming sample #{from} to #{to} in file #{file}"
+		`bsub -o rename.log -W 4:00 -J rename#{to} python ~/scripts/dpark/dannyscripts/snp_call.py vcf_rename #{file} #{from}=#{to} #{outdir}/#{to}.vcf.gz`
+	end
+	if bam_sample_mapping[from] != nil
+		#submit bam renaming job
+		file = bam_sample_mapping[from]
+		puts "Renaming sample #{from} to #{to} in file #{file}"
+		`bsub -o rename.log -q week -W 24:00 python ~/scripts/dpark/dannyscripts/snp_call.py rename_bam #{file} #{to} #{outdir}/#{to}.bam`
+	end
+end

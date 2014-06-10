@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+#in: several bam files
+#out: mixed bam
+export TMP=/broad/hptmp/emoss
+
+echo 'Merging...'
+mv $TMP/merged.bam $TMP/old_merged.bam
+samtools merge $TMP/merged.bam $@
+
+mv $TMP/header.sam $TMP/old_header.sam
+
+echo 'Generating header...'
+for i in $*
+	do samtools view -H $i | grep RG >> $TMP/header.sam
+done
+
+echo 'Replacing header...'
+#java -Xmx2g -jar /seq/software/picard/current/bin/ReplaceSamHeader.jar INPUT=$TMP/merged.bam HEADER=$TMP/header.sam OUTPUT=$TMP/ reheadered.bam
+
+echo 'Merging read groups...'
+java -Xmx2g -jar /seq/software/picard/current/bin/AddOrReplaceReadGroups.jar OUTPUT=./mixed.bam INPUT=$TMP/merged.bam RGLB=library RGPL=platform RGPU=barcode RGSM="$*" RGDT=2013-06-26
+
+samtools index mixed.bam

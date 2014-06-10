@@ -1,0 +1,54 @@
+#!/usr/bin/env ruby
+
+#accepts a bed interval, a bam, a vcf directory, sample constituent lists, and an index
+abort("Params: interval.bed sample.bam vcf_dir sample_strain_key") if ARGV.length != 4
+
+#returns presence of sample in bam within interval (as a fraction of the total reads containing the sequence contained in the specified interval within the specified sequenced sample)
+
+=begin
+out format:
+interval:
+sample1:	0.4
+sample2:	0.3
+sample3:	0.2
+sample4:	0.95
+other:		0.05
+=end
+
+require('~/scripts/kit/util.rb')
+require 'pathname'
+
+intervals = dice_file ARGV.first
+bam = ARGV.second
+vcf_dir = ARGV.third
+sample_key = dice_file ARGV.fourth
+
+intervals.each do |interval|
+#1. get the anticipated haplotype for each sample in the mixture
+
+	#a. find the coded strains in mixture
+	strains = bam.split('/').last.split('_').second.split('.').drop(1).map{|s| 'R' + s}
+	#b. find the corresponding sample names
+	names = sample_key.select{|t| strains.include? t.first}.transpose.last
+	#c. find the vcf files involved
+	vcf_files = names.map{|n| [vcf_dir, n + '.vcf.gz'].join('/')}
+	vcf_files.each{|f| abort("#{f} not found!") if not Pathname.new(f).exist?}
+	tmp_file = "/tmp/#{strains.join('_')}_#{interval.join('_')}.fa"
+	
+	#d. generate and retrieve the sequence and store it
+	seqs = vcf_files.map{|f| 
+		`java -Xmx2g -jar /humgen/gsa-hpprojects/GATK/bin/GenomeAnalysisTK-2.1-13-g1706365/GenomeAnalysisTK.jar -R ~/moss/refseq/plasmodb/9/genome.fasta -T FastaAlternateReferenceMaker -o #{tmp_file} --variant #{f} -L #{interval.first}:#{interval.second}-#{interval.third}`
+		dice_text(`cat #{tmp_file}`).drop(1).join('')
+	}
+
+#	abort("Error retrieving haplotypes.  Is Java launchable?") if seqs.map{|s| s.length}.min == 0
+#2. load read sequences from interval into memory
+	reads = `bedtools intersect -b #{ARGV.first} -abam #{bam} | samtools view - | cut -f10`.split("\n")
+	incidence = reads.map{|r| seqs.map{|s|  r.include?(s) ? 1 : 0}}
+	names.each_with_index do |n,i|
+#		puts "#{n}: #{(incidence.transpose[i].sum / incidence.length.to_f).round(6)}"
+#		puts ">#{n}: #{strains[i]}: #{interval.first}:#{interval.second}-#{interval.third}\n#{seqs[i]}"
+	end
+#	puts reads.length
+	puts names.each_index.map{|i| (incidence.transpose[i].sum / incidence.length.to_f).round(3)}.uniq.length
+end

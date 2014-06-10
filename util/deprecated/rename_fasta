@@ -1,0 +1,7 @@
+#!/usr/bin/env ruby
+
+infile = ARGV[0]
+
+input = File.open(infile).read.split("\n")
+input[0] = ">#{infile}"
+File.open(infile, 'w').write(input.join("\n"))

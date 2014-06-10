@@ -1,0 +1,107 @@
+#!/usr/bin/env ruby
+
+#in: tabixed .pi.gz file from vcftools --site-pi
+#e.g. vcftools --site-pi --gzvcf ../vcf/Merged.vcf.gz --keep png.txt --out tmp/png_pi
+#find * -exec bgzip {} \;
+#find * -exec tabix -s 1 -b2 -e2 -S 1 {} \;
+
+
+def go
+	parse_options
+	post_process_pi
+end
+
+def post_process_pi
+	if @options[:bed] != nil
+		bases = 0
+		pis = []
+		bed = File.open(@options[:bed]).read.split("\n").map{|t| t.split("\t")}
+		bed.each do |region|
+			new = `tabix #{@pi} #{region[0]}:#{region[1]}-#{region[2]}`.split("\n")
+			pis += new if not new.length == 0
+			bases += (region[2].to_i - region[1].to_i)
+		end
+	puts bases
+	puts pis.map{|t| t.split("\t")[2].to_f}.reduce(:+)/bases.to_f
+	end	
+	
+	
+	if @options[:gff] != nil
+		puts "Pi\tpiN\t#Nonsyn\tpiS\t#Syn\tpiN/piS"
+		gff = File.open(@options[:gff]).read.split("\n").map{|t| t.split("\t")}
+		gff.each do |region|
+			pis = `tabix #{@pi} #{region[0]}:#{region[3]}-#{region[4]}`
+			
+			if pis.length == 0
+#				puts "Missing sites; pi cannot be calculated for this gene."
+				next
+			else
+#				puts region
+#$stdin.gets
+				pis = pis.split("\n").map{|t| t.split("\t")}
+			end
+			
+			if @options[:snpeff_vcf] != nil
+				vcf = `tabix #{@options[:snpeff_vcf]} -h #{region[0]}:#{region[3]}-#{region[4]} | vcf-subset -p -c #{@samples} | grep -v \\#`.split("\n").map{|t| t.split("\t")}.inject(Hash.new()){|hash, vcf_line| hash[vcf_line[0..1].join("\t")] = vcf_line.join("\t"); hash}
+				
+				n_vcf = vcf.keys.length
+				
+				syn = pis.map{|p| (vcf[p[0..1].join("\t")] != nil and vcf[p[0..1].join("\t")].include? 'SYN' and not vcf[p[0..1].join("\t")].include? 'NON_') ? p[2].to_f : 0}.reduce(:+) / (region[4].to_i - region[3].to_i).to_f
+				n_syn = pis.map{|p| (vcf[p[0..1].join("\t")] != nil and vcf[p[0..1].join("\t")].include? 'SYN' and not vcf[p[0..1].join("\t")].include? 'NON_') ? 1 : 0}.reduce(:+)
+				
+				
+				nonsyn = pis.map{|p| (vcf[p[0..1].join("\t")] != nil and vcf[p[0..1].join("\t")].include? 'NON_SYN') ? p[2].to_f : 0}.reduce(:+) / (region[4].to_i - region[3].to_i).to_f
+				n_nonsyn = pis.map{|p| (vcf[p[0..1].join("\t")] != nil and vcf[p[0..1].join("\t")].include? 'NON_SYN') ? 1 : 0}.reduce(:+)
+				
+				gene_pi = pis.map{|t| t[2].to_f}.reduce(:+) / (region[4].to_i - region[3].to_i).to_f
+				
+				n_s = nonsyn/syn if syn != nil and nonsyn != nil
+				
+				
+				puts [gene_pi, nonsyn, n_nonsyn, syn, n_syn, n_s, region].flatten.join("\t")
+				#puts vcf.values
+				#$stdin.gets
+
+			else
+				puts [pis.map{|t| t[2].to_f}.reduce(:+) / (region[4].to_i - region[3].to_i).to_f, region].flatten.join("\t")
+			end
+		
+		end
+	end
+end
+
+def parse_options()		
+	require 'optparse'
+	
+	@options = {}
+	
+	opt_parser = OptionParser.new do |opt|
+		opt.banner = "Usage: pi_post_process sites.pi.gz sample_list [OPTIONS]"
+		opt.separator ""
+		opt.separator "Options"
+		
+		opt.on("--bed FILE", "Outputs pi within the union of all regions defined by the BED file") do |loc|
+			@options[:bed] = loc
+		end
+		
+		opt.on("--gff FILE", "Outputs pi within each gff entry, along with information provided by the gff entry") do |gff| 
+			@options[:gff] = gff
+		end
+		
+		opt.on("--vcf FILE", "Outputs piN and piS according to a tabix-indexed snpEff-annotated VCF.gz file. Currently only implemented in conjunction with --gff.") do |vcf|
+			@options[:snpeff_vcf] = vcf
+		end
+	end
+	
+	opt_parser.parse!	
+	
+	if ARGV.length != 2
+		puts opt_parser
+		abort()
+	end	
+	
+	@pi = ARGV[0]
+	@samples = ARGV[1]
+end
+
+go

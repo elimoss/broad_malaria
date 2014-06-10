@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+
+#in: windowed_genome.bed merged.vcf.gz
+#out: in.bed with one column added per sample containing snp count per row interval.
+
+abort("Usage: windowed_polymorphism_counter windowed_genome.bed merged.vcf.gz") if ARGV.length != 2
+
+bed = File.open(ARGV[0]).read.split("\n").map{|t| t.split("\t")}
+headers = `tabix -h #{ARGV[1]} 1-100 | tail -1`.split("\t")
+puts (['Chromosome', 'Window Start', 'Window End']+headers[9..headers.length]).join("\t")
+bed.each do |loc|
+	lines = `tabix #{ARGV[1]} #{loc[0]}:#{loc[1]}-#{loc[2]}`
+	if lines.length == 0
+		puts loc.join("\t") 
+	else
+		cols = [0]*(lines.split("\n").first.split("\t").length - 9)
+		lines.split("\n").each do |line|
+			line.split("\t").each_index do |col|
+				next if col < 9
+				cols[col-9] += 1 if line.split("\t")[col][0].to_i != 0
+			end
+		end
+		puts (loc+cols).join("\t")
+	end
+end

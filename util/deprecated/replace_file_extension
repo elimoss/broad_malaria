@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+
+abort("Usage: replace_file_extension file extension") if ARGV.length != 2
+
+file = ARGV[0]
+ext = ARGV[1]
+
+if file.split(".")[0].length == 0
+	abort("is there a leading period in the filename?")
+else
+	puts `mv #{file} #{file.split(".")[0]}.#{ext}`
+end
